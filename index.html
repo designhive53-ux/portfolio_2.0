@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEXUS | Dev Workspace</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;500;700&family=Syncopate:wght@400;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <style>
+        :root {
+            --bg-color: #050505;
+            --text-color: #f0f0f0;
+            --accent: #00ff88; /* Neon Green */
+            --accent-2: #00ccff;
+            --card-bg: rgba(255, 255, 255, 0.02);
+            --border-color: rgba(255, 255, 255, 0.1);
+            --input-bg: rgba(0, 0, 0, 0.5);
+            --font-display: 'Syncopate', sans-serif;
+            --font-body: 'Space Grotesk', sans-serif;
+            --font-code: 'JetBrains Mono', monospace;
+            --easing: cubic-bezier(0.19, 1, 0.22, 1);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; cursor: none; }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: var(--font-body);
+            overflow-x: hidden;
+            width: 100vw;
+        }
+
+        /* --- Custom Cursor --- */
+        .cursor-dot, .cursor-outline {
+            position: fixed; top: 0; left: 0;
+            transform: translate(-50%, -50%);
+            border-radius: 50%; z-index: 9999; pointer-events: none;
+        }
+        .cursor-dot { width: 8px; height: 8px; background-color: var(--accent); }
+        .cursor-outline {
+            width: 40px; height: 40px; border: 1px solid var(--accent);
+            transition: width 0.2s, height 0.2s;
+        }
+        body:hover .cursor-outline.hovered {
+            width: 60px; background: rgba(0, 255, 136, 0.1); border-color: transparent;
+        }
+
+        /* --- WebGL Shader --- */
+        #canvas-container {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: -1; opacity: 0.5;
+        }
+
+        /* --- Layout --- */
+        .container { width: 90%; max-width: 1400px; margin: 0 auto; position: relative; z-index: 2; }
+
+        /* --- Magnetic Navigation --- */
+        nav {
+            position: fixed; top: 0; left: 0; width: 100%;
+            padding: 2rem 5%; display: flex; justify-content: space-between;
+            align-items: center; z-index: 100; mix-blend-mode: difference;
+        }
+        .logo { font-family: var(--font-display); font-weight: 700; font-size: 1.5rem; letter-spacing: 2px; }
+        .nav-links { display: flex; gap: 3rem; list-style: none; }
+        .nav-link { text-decoration: none; color: var(--text-color); font-family: var(--font-body); text-transform: uppercase; letter-spacing: 1px; }
+        .magnetic-wrap { display: inline-block; transition: transform 0.3s var(--easing); }
+
+        /* --- Hero (Rejection Layout) --- */
+        header { height: 100vh; display: flex; flex-direction: column; justify-content: center; padding-top: 5rem; }
+        h1 {
+            font-family: var(--font-display); font-size: clamp(4rem, 12vw, 10rem);
+            line-height: 0.85; text-transform: uppercase; mix-blend-mode: overlay;
+        }
+        .hero-sub {
+            font-size: 1.2rem; max-width: 500px; margin-top: 2rem;
+            border-left: 2px solid var(--accent); padding-left: 1.5rem;
+        }
+
+        /* --- Inputs (Designed for the theme) --- */
+        .input-group {
+            background: var(--input-bg); border: 1px solid var(--border-color);
+            padding: 1.5rem; margin-bottom: 2rem; backdrop-filter: blur(10px);
+        }
+        .input-row { display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+        
+        input, textarea, select {
+            background: transparent; border: 1px solid #333; color: #fff;
+            padding: 0.8rem; font-family: var(--font-code); width: 100%; outline: none;
+        }
+        input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+        textarea { height: 120px; resize: vertical; }
+
+        .btn-main {
+            background: var(--accent); color: #000; border: none; padding: 0.8rem 2rem;
+            font-family: var(--font-display); font-weight: 700; text-transform: uppercase;
+            letter-spacing: 1px; transition: 0.3s;
+        }
+        .btn-main:hover { background: #fff; box-shadow: 0 0 20px var(--accent); }
+
+        .btn-delete {
+            background: transparent; border: 1px solid #ff4444; color: #ff4444;
+            padding: 0.4rem 1rem; font-family: var(--font-code); font-size: 0.8rem;
+        }
+        .btn-delete:hover { background: #ff4444; color: #fff; }
+
+        /* --- Sections --- */
+        section { padding: 6rem 0; border-bottom: 1px solid var(--border-color); }
+        .section-head { margin-bottom: 3rem; display: flex; justify-content: space-between; align-items: flex-end; }
+        .section-head h2 { font-family: var(--font-display); font-size: 2.5rem; }
+
+        /* --- 3D Tilt Cards (Projects) --- */
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem; }
+
+        .card {
+            background: var(--card-bg); border: 1px solid var(--border-color);
+            height: 350px; position: relative; transform-style: preserve-3d;
+            perspective: 1000px; overflow: hidden; padding: 2rem;
+            display: flex; flex-direction: column; justify-content: flex-end;
+            border-radius: 4px; transition: transform 0.1s linear;
+        }
+        .card-bg {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            object-fit: cover; opacity: 0.3; z-index: 1; transition: 0.3s;
+        }
+        .card:hover .card-bg { opacity: 0.6; transform: scale(1.05); }
+        .card-glare {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.2), transparent 60%);
+            opacity: 0; pointer-events: none; mix-blend-mode: overlay;
+        }
+        .card-content { position: relative; z-index: 3; transform: translateZ(30px); }
+        .card-title { font-family: var(--font-display); font-size: 1.5rem; margin-bottom: 0.5rem; }
+        .card-link { color: var(--accent); text-decoration: none; font-weight: bold; margin-top: 1rem; display: inline-block; }
+
+        /* --- Code Cards (File Style) --- */
+        .code-card {
+            background: #0a0a0a; border: 1px solid #333; padding: 1.5rem;
+            border-radius: 6px; display: flex; flex-direction: column; gap: 1rem;
+        }
+        .file-header { display: flex; justify-content: space-between; border-bottom: 1px solid #333; padding-bottom: 0.5rem; }
+        .file-name { color: var(--accent-2); font-family: var(--font-code); font-weight: bold; }
+        .file-preview { color: #666; font-family: var(--font-code); font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .file-actions { display: flex; gap: 1rem; margin-top: auto; }
+        .btn-dwn {
+            background: #222; color: #fff; border: none; padding: 0.5rem 1rem;
+            font-family: var(--font-code); flex: 1; text-align: center; cursor: none;
+        }
+        .btn-dwn:hover { background: var(--accent-2); color: #000; }
+
+    </style>
+</head>
+<body>
+
+    <div class="cursor-dot"></div>
+    <div class="cursor-outline"></div>
+    <div id="canvas-container"></div>
+
+    <nav>
+        <div class="logo magnetic-area">
+            <span class="magnetic-wrap">NEXUS_OS</span>
+        </div>
+        <ul class="nav-links">
+            <li class="magnetic-area"><a href="#websites" class="nav-link magnetic-wrap">Websites</a></li>
+            <li class="magnetic-area"><a href="#code-vault" class="nav-link magnetic-wrap">Code Vault</a></li>
+        </ul>
+    </nav>
+
+    <main class="container">
+        <!-- HERO -->
+        <header>
+            <h1>Digital<br>Architect</h1>
+            <div class="hero-sub">
+                My personal workspace. Deploy projects locally and save code snippets directly as downloadable files.
+            </div>
+        </header>
+
+        <!-- 1. WEBSITE LINKS MANAGER -->
+        <section id="websites">
+            <div class="section-head">
+                <h2>// 01_DASHBOARD</h2>
+                <span style="font-family: var(--font-code); color: var(--accent);">SYSTEM: ONLINE</span>
+            </div>
+
+            <!-- Add New Link Form -->
+            <div class="input-group">
+                <div class="input-row">
+                    <input type="text" id="web-title" placeholder="Project Name">
+                    <input type="text" id="web-link" placeholder="https://...">
+                </div>
+                <input type="text" id="web-desc" placeholder="Short Description">
+                <button class="btn-main" onclick="saveWebsite()">Deploy Link</button>
+            </div>
+
+            <!-- Grid of Saved Websites -->
+            <div class="grid" id="website-grid">
+                <!-- Javascript will load items here -->
+            </div>
+        </section>
+
+        <!-- 2. CODE FILES MANAGER (Multiple Files) -->
+        <section id="code-vault">
+            <div class="section-head">
+                <h2>// 02_SOURCE_CODE</h2>
+                <span style="font-family: var(--font-code); color: var(--accent);">MEMORY: LOCAL_STORAGE</span>
+            </div>
+
+            <!-- Add New Code Form -->
+            <div class="input-group">
+                <div class="input-row">
+                    <input type="text" id="file-title" placeholder="File Name (e.g. app.js)">
+                    <select id="file-lang">
+                        <option value="js" style="color:black">JavaScript</option>
+                        <option value="html" style="color:black">HTML</option>
+                        <option value="css" style="color:black">CSS</option>
+                        <option value="py" style="color:black">Python</option>
+                    </select>
+                </div>
+                <textarea id="file-content" placeholder="Paste your code here..."></textarea>
+                <br>
+                <button class="btn-main" onclick="saveCodeFile()">Save to Vault</button>
+            </div>
+
+            <!-- Grid of Saved Code Files -->
+            <div class="grid" id="code-grid">
+                <!-- Javascript will load files here -->
+            </div>
+        </section>
+
+        <footer style="padding: 4rem 0; text-align: center; color: #555; font-family: var(--font-code);">
+            <p>&copy; 2023 NEXUS SYSTEMS. All data persists locally.</p>
+        </footer>
+    </main>
+
+    <script>
+        // --- 1. THREE.JS SHADER BACKGROUND (The cool one) ---
+        const initThreeJS = () => {
+            const container = document.getElementById('canvas-container');
+            const scene = new THREE.Scene();
+            const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+            const renderer = new THREE.WebGLRenderer({ alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            container.appendChild(renderer.domElement);
+
+            const uniforms = {
+                u_time: { value: 0.0 },
+                u_resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
+                u_mouse: { value: new THREE.Vector2(0, 0) }
+            };
+
+            const geometry = new THREE.PlaneGeometry(2, 2);
+            
+            // High-end Shader
+            const fragmentShader = `
+                uniform float u_time;
+                uniform vec2 u_resolution;
+                uniform vec2 u_mouse;
+
+                vec3 palette( float t ) {
+                    vec3 a = vec3(0.5, 0.5, 0.5);
+                    vec3 b = vec3(0.5, 0.5, 0.5);
+                    vec3 c = vec3(1.0, 1.0, 1.0);
+                    vec3 d = vec3(0.263,0.416,0.557);
+                    return a + b*cos( 6.28318*(c*t+d) );
+                }
+
+                void main() {
+                    vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / u_resolution.y;
+                    vec2 uv0 = uv;
+                    vec3 finalColor = vec3(0.0);
+                    
+                    // Mouse interaction
+                    uv += (u_mouse * 0.05);
+
+                    for (float i = 0.0; i < 3.0; i++) {
+                        uv = fract(uv * 1.5) - 0.5;
+
+                        float d = length(uv) * exp(-length(uv0));
+                        vec3 col = palette(length(uv0) + i*.4 + u_time*.4);
+
+                        d = sin(d*8. + u_time)/8.;
+                        d = abs(d);
+                        d = pow(0.01 / d, 1.2);
+                        finalColor += col * d;
+                    }
+                        
+                    gl_FragColor = vec4(finalColor * 0.15, 1.0);
+                }
+            `;
+
+            const material = new THREE.ShaderMaterial({
+                uniforms: uniforms,
+                fragmentShader: fragmentShader,
+                vertexShader: `void main() { gl_Position = vec4( position, 1.0 ); }`
+            });
+
+            scene.add(new THREE.Mesh(geometry, material));
+
+            document.addEventListener('mousemove', (e) => {
+                uniforms.u_mouse.value.x = e.clientX / window.innerWidth;
+                uniforms.u_mouse.value.y = 1.0 - (e.clientY / window.innerHeight);
+            });
+
+            const animate = () => {
+                requestAnimationFrame(animate);
+                uniforms.u_time.value += 0.01;
+                renderer.render(scene, camera);
+            };
+            animate();
+
+            window.addEventListener('resize', () => {
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                uniforms.u_resolution.value.x = window.innerWidth;
+                uniforms.u_resolution.value.y = window.innerHeight;
+            });
+        };
+        initThreeJS();
+
+        // --- 2. MAGNETIC NAVIGATION ---
+        document.querySelectorAll('.magnetic-area').forEach(area => {
+            const wrap = area.querySelector('.magnetic-wrap');
+            if(!wrap) return;
+            area.addEventListener('mousemove', (e) => {
+                const rect = area.getBoundingClientRect();
+                const x = e.clientX - rect.left - rect.width / 2;
+                const y = e.clientY - rect.top - rect.height / 2;
+                wrap.style.transform = `translate(${x * 0.4}px, ${y * 0.4}px)`;
+            });
+            area.addEventListener('mouseleave', () => { wrap.style.transform = 'translate(0px, 0px)'; });
+        });
+
+        // --- 3. CURSOR & 3D TILT ---
+        const cursorDot = document.querySelector('.cursor-dot');
+        const cursorOutline = document.querySelector('.cursor-outline');
+
+        window.addEventListener('mousemove', (e) => {
+            cursorDot.style.left = `${e.clientX}px`;
+            cursorDot.style.top = `${e.clientY}px`;
+            cursorOutline.style.left = `${e.clientX}px`;
+            cursorOutline.style.top = `${e.clientY}px`;
+        });
+
+        const initTilt = () => {
+            document.querySelectorAll('.tilt-card').forEach(card => {
+                const glare = card.querySelector('.card-glare');
+                card.addEventListener('mousemove', (e) => {
+                    const rect = card.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    card.style.transform = `perspective(1000px) rotateX(${(y - rect.height/2)/15}deg) rotateY(${-(x - rect.width/2)/15}deg)`;
+                    glare.style.opacity = '1';
+                    glare.style.background = `radial-gradient(circle at ${x}px ${y}px, rgba(0, 255, 136, 0.3), transparent 60%)`;
+                });
+                card.addEventListener('mouseleave', () => {
+                    card.style.transform = `perspective(1000px) rotateX(0) rotateY(0)`;
+                    glare.style.opacity = '0';
+                });
+            });
+        };
+        initTilt();
+
+        document.querySelectorAll('a, button, input, textarea').forEach(el => {
+            el.addEventListener('mouseenter', () => cursorOutline.classList.add('hovered'));
+            el.addEventListener('mouseleave', () => cursorOutline.classList.remove('hovered'));
+        });
+
+        // --- 4. WEBSITE LINKS LOGIC ---
+        const websiteGrid = document.getElementById('website-grid');
+        
+        function loadWebsites() {
+            const sites = JSON.parse(localStorage.getItem('myWebsites')) || [];
+            websiteGrid.innerHTML = '';
+            if(sites.length === 0) websiteGrid.innerHTML = '<p style="color:#555; grid-column: 1/-1;">No deployed websites yet.</p>';
+
+            sites.forEach((site, index) => {
+                const card = document.createElement('div');
+                card.className = 'card tilt-card';
+                // Random image based on index
+                card.innerHTML = `
+                    <img src="https://picsum.photos/seed/${index}/400/300" class="card-bg" alt="Site">
+                    <div class="card-glare"></div>
+                    <div class="card-content">
+                        <h3 class="card-title">${site.title}</h3>
+                        <p style="color:#aaa; font-size:0.9rem">${site.desc}</p>
+                        <a href="${site.link}" target="_blank" class="card-link">VISIT LINK &rarr;</a>
+                        <button class="btn-delete" style="position:absolute; top:1rem; right:1rem;" onclick="deleteWebsite(${index})">DEL</button>
+                    </div>
+                `;
+                websiteGrid.appendChild(card);
+            });
+            initTilt(); // Re-bind tilt to new cards
+        }
+
+        function saveWebsite() {
+            const title = document.getElementById('web-title').value;
+            const link = document.getElementById('web-link').value;
+            const desc = document.getElementById('web-desc').value;
+
+            if(!title || !link) return alert("Name and URL required");
+
+            const sites = JSON.parse(localStorage.getItem('myWebsites')) || [];
+            sites.push({ title, link, desc });
+            localStorage.setItem('myWebsites', JSON.stringify(sites));
+            
+            document.getElementById('web-title').value = '';
+            document.getElementById('web-link').value = '';
+            document.getElementById('web-desc').value = '';
+            
+            loadWebsites();
+        }
+
+        function deleteWebsite(index) {
+            let sites = JSON.parse(localStorage.getItem('myWebsites')) || [];
+            sites.splice(index, 1);
+            localStorage.setItem('myWebsites', JSON.stringify(sites));
+            loadWebsites();
+        }
+
+        // --- 5. CODE FILES LOGIC (Multiple Files) ---
+        const codeGrid = document.getElementById('code-grid');
+
+        function loadCodeFiles() {
+            const files = JSON.parse(localStorage.getItem('myCodeFiles')) || [];
+            codeGrid.innerHTML = '';
+            if(files.length === 0) codeGrid.innerHTML = '<p style="color:#555; grid-column: 1/-1;">Vault is empty.</p>';
+
+            files.forEach((file, index) => {
+                const card = document.createElement('div');
+                card.className = 'code-card'; // No tilt for code cards, cleaner UI
+                card.innerHTML = `
+                    <div class="file-header">
+                        <span class="file-name">${file.title}</span>
+                        <span style="color:#555; font-family:var(--font-code)">${file.lang.toUpperCase()}</span>
+                    </div>
+                    <div class="file-preview">${file.content.substring(0, 60)}...</div>
+                    <div class="file-actions">
+                        <button class="btn-delete" onclick="deleteCodeFile(${index})">DELETE</button>
+                        <button class="btn-dwn" onclick="downloadFile(${index})">DOWNLOAD</button>
+                    </div>
+                `;
+                codeGrid.appendChild(card);
+            });
+        }
+
+        function saveCodeFile() {
+            const title = document.getElementById('file-title').value;
+            const lang = document.getElementById('file-lang').value;
+            const content = document.getElementById('file-content').value;
+
+            if(!title || !content) return alert("Filename and code required");
+
+            const files = JSON.parse(localStorage.getItem('myCodeFiles')) || [];
+            files.push({ title, lang, content });
+            localStorage.setItem('myCodeFiles', JSON.stringify(files));
+            
+            document.getElementById('file-title').value = '';
+            document.getElementById('file-content').value = '';
+            
+            loadCodeFiles();
+        }
+
+        function deleteCodeFile(index) {
+            let files = JSON.parse(localStorage.getItem('myCodeFiles')) || [];
+            files.splice(index, 1);
+            localStorage.setItem('myCodeFiles', JSON.stringify(files));
+            loadCodeFiles();
+        }
+
+        function downloadFile(index) {
+            const files = JSON.parse(localStorage.getItem('myCodeFiles')) || [];
+            const file = files[index];
+            
+            const blob = new Blob([file.content], { type: 'text/plain' });
+            const anchor = document.createElement('a');
+            anchor.download = file.title;
+            anchor.href = window.URL.createObjectURL(blob);
+            anchor.click();
+        }
+
+        // Initialize
+        loadWebsites();
+        loadCodeFiles();
+
+    </script>
+</body>
+</html>
